@@ -7,6 +7,20 @@ import (
 	"net/http"
 )
 
+var (
+	// allowLFLineEndings determines whether LF line endings are valid
+	// for situations where RFC 7230 prescribes CRLF line endings.
+	allowLFLineEndings = false
+)
+
+// AllowLFLineEndings defines whether LF line endings are allowed as a
+// replacement for CRLF line endings for a more tolerant source parsing.
+//
+// AllowLFLineEndings doesn't have any effect on serialization functions.
+func AllowLFLineEndings(allow bool) {
+	allowLFLineEndings = allow
+}
+
 // ParseRequest reads a given source and parses an http.Request instance
 // from it. In case an error occurs, a zero-value Request is returned.
 //
