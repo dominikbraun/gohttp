@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 var (
@@ -30,13 +31,13 @@ func AllowLFLineEndings(allow bool) {
 //
 // If the user allows LF line endings, the header fields and the empty
 // line terminating the header section may be LF instead of CRLF endings.
-func ParseRequest(r *bufio.Reader) (*http.Request, error) {
+func ParseRequest(reader *bufio.Reader) (*http.Request, error) {
 	request := http.Request{}
 
 	// RFC 7230, section 3.5. states that a robust parser implementation
 	// should ignore at least one empty line prior to the request line.
 	for {
-		line, err := r.ReadString('\n')
+		line, err := reader.ReadString('\n')
 		if err != nil {
 			return nil, err
 		}
@@ -57,13 +58,19 @@ func ParseRequest(r *bufio.Reader) (*http.Request, error) {
 
 	request.Header = make(http.Header)
 
+	var line string
+	var err error
 	for {
-		line, err := r.ReadString('\n')
+		line, err = reader.ReadString('\n')
 		if err != nil && !errors.Is(err, io.EOF) {
 			return nil, err
 		}
 
-		if errors.Is(err, io.EOF) || isNewLine(line) {
+		if errors.Is(err, io.EOF) {
+			break
+		}
+
+		if isNewLine(line) {
 			break
 		}
 
@@ -75,31 +82,26 @@ func ParseRequest(r *bufio.Reader) (*http.Request, error) {
 		request.Header.Add(fieldName, fieldValue)
 	}
 
-	emptyLine, err := r.ReadString('\n')
-	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, err
-	}
-
-	// If the error is EOF, a body isn't expected anymore. Otherwise, an
-	// empty line followed by the actual message body is expected.
-	if errors.Is(err, io.EOF) {
-		return &request, nil
-	}
-
-	if !isNewLine(emptyLine) {
+	if !isNewLine(line) {
 		return nil, errors.New("empty line after header section is missing")
 	}
 
-	bodyOnset, err := r.ReadString('\n')
+	length, err := determineBodyLength(request.Header, reader)
 	if err != nil {
-		if errors.Is(err, io.EOF) {
-			return &request, nil
-		}
 		return nil, err
 	}
 
-	if length := determineBodyLength(request.Header, bodyOnset); length > 0 {
-		// ToDo: Write remaining message into request.Body
+	if length > 0 {
+		var body = make([]byte, length)
+		n, err := reader.Read(body)
+		if err != nil {
+			return nil, err
+		}
+		if n != length {
+			return nil, errors.New("wrong body length")
+		}
+
+		fmt.Println(string(body))
 	}
 
 	return nil, nil
@@ -181,7 +183,7 @@ func parseRequestLine(line string) (string, *url.URL, string, error) {
 }
 
 func parseHeaderField(line string) (string, string, error) {
-	tokens := strings.Split(line, ":")
+	tokens := strings.SplitN(line, ":", 2)
 
 	// RFC 7230, sections 3.2. and 3.2.4. prescribe exactly 2 tokens.
 	if len(tokens) != 2 {
@@ -194,21 +196,31 @@ func parseHeaderField(line string) (string, string, error) {
 	return name, value, nil
 }
 
-func determineBodyLength(headers http.Header, bodyOnset string) int {
+func determineBodyLength(headers http.Header, reader *bufio.Reader) (int, error) {
 
 	// If the Transfer-Encoding header is set, the length of the message
 	// chunk is contained within the body (RFC 7230, section 3.3.3.).
 	if transferEncoding := headers.Get("Transfer-Encoding"); transferEncoding != "" {
-		// ToDo: Determine the body length based on Transfer-Encoding
-		return 1
+		firstBodyLine, err := reader.ReadString('\n')
+		if err != nil {
+			return 0, err
+		}
+
+		// Parse the hex code as int.
+		// Use TrimRightFunc and not strings.TrimSpace to make sure the hex is at the beginning.
+		length, err := strconv.ParseInt(strings.TrimRightFunc(firstBodyLine, unicode.IsSpace), 16, 64)
+		if err != nil {
+			return 0, err
+		}
+
+		return int(length), nil
 	}
 
 	if contentLength := headers.Get("Content-Length"); contentLength != "" {
-		length, _ := strconv.Atoi(contentLength)
-		return length
+		return strconv.Atoi(contentLength)
 	}
 
-	return 0
+	return 0, nil
 }
 
 func isNewLine(line string) bool {
