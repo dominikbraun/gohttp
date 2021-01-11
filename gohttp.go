@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 var (
@@ -57,13 +58,19 @@ func ParseRequest(r *bufio.Reader) (*http.Request, error) {
 
 	request.Header = make(http.Header)
 
+	var line string
+	var err error
 	for {
-		line, err := r.ReadString('\n')
+		line, err = r.ReadString('\n')
 		if err != nil && !errors.Is(err, io.EOF) {
 			return nil, err
 		}
 
 		if errors.Is(err, io.EOF) || isNewLine(line) {
+			break
+		}
+
+		if line == "\r\n" {
 			break
 		}
 
@@ -75,31 +82,21 @@ func ParseRequest(r *bufio.Reader) (*http.Request, error) {
 		request.Header.Add(fieldName, fieldValue)
 	}
 
-	emptyLine, err := r.ReadString('\n')
-	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, err
-	}
-
-	// If the error is EOF, a body isn't expected anymore. Otherwise, an
-	// empty line followed by the actual message body is expected.
-	if errors.Is(err, io.EOF) {
-		return &request, nil
-	}
-
-	if !isNewLine(emptyLine) {
+	if line != "\r\n" {
 		return nil, errors.New("empty line after header section is missing")
 	}
 
-	bodyOnset, err := r.ReadString('\n')
-	if err != nil {
-		if errors.Is(err, io.EOF) {
-			return &request, nil
+	if length := determineBodyLength(request.Header, r); length > 0 {
+		var body = make([]byte, length)
+		n, err := r.Read(body)
+		if err != nil {
+			return nil, err
 		}
-		return nil, err
-	}
+		if n != length {
+			return nil, errors.New("wrong body length")
+		}
 
-	if length := determineBodyLength(request.Header, bodyOnset); length > 0 {
-		// ToDo: Write remaining message into request.Body
+		fmt.Println(string(body))
 	}
 
 	return nil, nil
@@ -181,7 +178,7 @@ func parseRequestLine(line string) (string, *url.URL, string, error) {
 }
 
 func parseHeaderField(line string) (string, string, error) {
-	tokens := strings.Split(line, ":")
+	tokens := strings.SplitN(line, ":", 2)
 
 	// RFC 7230, sections 3.2. and 3.2.4. prescribe exactly 2 tokens.
 	if len(tokens) != 2 {
@@ -194,13 +191,27 @@ func parseHeaderField(line string) (string, string, error) {
 	return name, value, nil
 }
 
-func determineBodyLength(headers http.Header, bodyOnset string) int {
+func determineBodyLength(headers http.Header, r *bufio.Reader) int {
 
 	// If the Transfer-Encoding header is set, the length of the message
 	// chunk is contained within the body (RFC 7230, section 3.3.3.).
 	if transferEncoding := headers.Get("Transfer-Encoding"); transferEncoding != "" {
 		// ToDo: Determine the body length based on Transfer-Encoding
-		return 1
+		firstBodyLine, err := r.ReadString('\n')
+		if err != nil {
+			return 0
+		}
+
+		if errors.Is(err, io.EOF) {
+			return 0
+		}
+
+		length, err := strconv.ParseInt(strings.TrimRightFunc(firstBodyLine, unicode.IsSpace), 16, 64)
+		if err != nil {
+			return 0
+		}
+
+		return int(length)
 	}
 
 	if contentLength := headers.Get("Content-Length"); contentLength != "" {
