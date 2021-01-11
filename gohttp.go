@@ -31,13 +31,13 @@ func AllowLFLineEndings(allow bool) {
 //
 // If the user allows LF line endings, the header fields and the empty
 // line terminating the header section may be LF instead of CRLF endings.
-func ParseRequest(r *bufio.Reader) (*http.Request, error) {
+func ParseRequest(reader *bufio.Reader) (*http.Request, error) {
 	request := http.Request{}
 
 	// RFC 7230, section 3.5. states that a robust parser implementation
 	// should ignore at least one empty line prior to the request line.
 	for {
-		line, err := r.ReadString('\n')
+		line, err := reader.ReadString('\n')
 		if err != nil {
 			return nil, err
 		}
@@ -61,12 +61,12 @@ func ParseRequest(r *bufio.Reader) (*http.Request, error) {
 	var line string
 	var err error
 	for {
-		line, err = r.ReadString('\n')
+		line, err = reader.ReadString('\n')
 		if err != nil && !errors.Is(err, io.EOF) {
 			return nil, err
 		}
 
-		if errors.Is(err, io.EOF) || isNewLine(line) {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 
@@ -86,9 +86,9 @@ func ParseRequest(r *bufio.Reader) (*http.Request, error) {
 		return nil, errors.New("empty line after header section is missing")
 	}
 
-	if length := determineBodyLength(request.Header, r); length > 0 {
+	if length := determineBodyLength(request.Header, reader); length > 0 {
 		var body = make([]byte, length)
-		n, err := r.Read(body)
+		n, err := reader.Read(body)
 		if err != nil {
 			return nil, err
 		}
@@ -191,13 +191,13 @@ func parseHeaderField(line string) (string, string, error) {
 	return name, value, nil
 }
 
-func determineBodyLength(headers http.Header, r *bufio.Reader) int {
+func determineBodyLength(headers http.Header, reader *bufio.Reader) int {
 
 	// If the Transfer-Encoding header is set, the length of the message
 	// chunk is contained within the body (RFC 7230, section 3.3.3.).
 	if transferEncoding := headers.Get("Transfer-Encoding"); transferEncoding != "" {
 		// ToDo: Determine the body length based on Transfer-Encoding
-		firstBodyLine, err := r.ReadString('\n')
+		firstBodyLine, err := reader.ReadString('\n')
 		if err != nil {
 			return 0
 		}
