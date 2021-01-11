@@ -215,5 +215,5 @@ func isNewLine(line string) bool {
 	if allowLFLineEndings {
 		return line == "\r\n" || line == "\n"
 	}
-	return line == "\n"
+	return line == "\r\n"
 }
