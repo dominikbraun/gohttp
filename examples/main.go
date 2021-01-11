@@ -13,18 +13,20 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
 			panic(err)
 		}
+
 		go func() {
 			connReader := bufio.NewReader(conn)
 			request, err := gohttp.ParseRequest(connReader)
 			if err != nil {
 				panic(err)
 			}
-			fmt.Println(request)
+			fmt.Printf("%v\n", request)
 		}()
 	}
 }
