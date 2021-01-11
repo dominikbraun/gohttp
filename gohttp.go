@@ -86,7 +86,12 @@ func ParseRequest(reader *bufio.Reader) (*http.Request, error) {
 		return nil, errors.New("empty line after header section is missing")
 	}
 
-	if length := determineBodyLength(request.Header, reader); length > 0 {
+	length, err := determineBodyLength(request.Header, reader)
+	if err != nil {
+		return nil, err
+	}
+
+	if length > 0 {
 		var body = make([]byte, length)
 		n, err := reader.Read(body)
 		if err != nil {
@@ -191,7 +196,7 @@ func parseHeaderField(line string) (string, string, error) {
 	return name, value, nil
 }
 
-func determineBodyLength(headers http.Header, reader *bufio.Reader) int {
+func determineBodyLength(headers http.Header, reader *bufio.Reader) (int, error) {
 
 	// If the Transfer-Encoding header is set, the length of the message
 	// chunk is contained within the body (RFC 7230, section 3.3.3.).
@@ -199,27 +204,23 @@ func determineBodyLength(headers http.Header, reader *bufio.Reader) int {
 		// ToDo: Determine the body length based on Transfer-Encoding
 		firstBodyLine, err := reader.ReadString('\n')
 		if err != nil {
-			return 0
-		}
-
-		if errors.Is(err, io.EOF) {
-			return 0
+			return 0, err
 		}
 
 		length, err := strconv.ParseInt(strings.TrimRightFunc(firstBodyLine, unicode.IsSpace), 16, 64)
 		if err != nil {
-			return 0
+			return 0, err
 		}
 
-		return int(length)
+		return int(length), nil
 	}
 
 	if contentLength := headers.Get("Content-Length"); contentLength != "" {
 		length, _ := strconv.Atoi(contentLength)
-		return length
+		return length, nil
 	}
 
-	return 0
+	return 0, nil
 }
 
 func isNewLine(line string) bool {
