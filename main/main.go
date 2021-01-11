@@ -20,7 +20,10 @@ func main() {
 		}
 		go func() {
 			connReader := bufio.NewReader(conn)
-			request, _ := gohttp.ParseRequest(connReader)
+			request, err := gohttp.ParseRequest(connReader)
+			if err != nil {
+				panic(err)
+			}
 			fmt.Println(request)
 		}()
 	}

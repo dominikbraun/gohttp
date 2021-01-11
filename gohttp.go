@@ -201,12 +201,13 @@ func determineBodyLength(headers http.Header, reader *bufio.Reader) (int, error)
 	// If the Transfer-Encoding header is set, the length of the message
 	// chunk is contained within the body (RFC 7230, section 3.3.3.).
 	if transferEncoding := headers.Get("Transfer-Encoding"); transferEncoding != "" {
-		// ToDo: Determine the body length based on Transfer-Encoding
 		firstBodyLine, err := reader.ReadString('\n')
 		if err != nil {
 			return 0, err
 		}
 
+		// Parse the hex code as int.
+		// Use TrimRightFunc and not strings.TrimSpace to make sure the hex is at the beginning.
 		length, err := strconv.ParseInt(strings.TrimRightFunc(firstBodyLine, unicode.IsSpace), 16, 64)
 		if err != nil {
 			return 0, err
@@ -216,8 +217,7 @@ func determineBodyLength(headers http.Header, reader *bufio.Reader) (int, error)
 	}
 
 	if contentLength := headers.Get("Content-Length"); contentLength != "" {
-		length, _ := strconv.Atoi(contentLength)
-		return length, nil
+		return strconv.Atoi(contentLength)
 	}
 
 	return 0, nil
