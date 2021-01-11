@@ -1,10 +1,10 @@
 # gohttp
 
 `gohttp` provides convenience functions for parsing `net/http` objects from a source and
-serializing them back to byte slices.
+serializing them back to byte slices. At the moment, `gohttp` is HTTP/1.1-compatible only.
 
-**Package status:** WIP and experimental. If you intend to parse request objects from a
-byte source, use [`http.ReadRequest`](https://golang.org/pkg/net/http/#ReadRequest) instead.
+**Status:** WIP and experimental. If you intend to parse requests from a byte source, use
+[`http.ReadRequest`](https://golang.org/pkg/net/http/#ReadRequest) instead.
 
 ## Examples
 
