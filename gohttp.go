@@ -70,7 +70,7 @@ func ParseRequest(r *bufio.Reader) (*http.Request, error) {
 			break
 		}
 
-		if line == "\r\n" {
+		if isNewLine(line) {
 			break
 		}
 
@@ -82,7 +82,7 @@ func ParseRequest(r *bufio.Reader) (*http.Request, error) {
 		request.Header.Add(fieldName, fieldValue)
 	}
 
-	if line != "\r\n" {
+	if isNewLine(line) {
 		return nil, errors.New("empty line after header section is missing")
 	}
 
