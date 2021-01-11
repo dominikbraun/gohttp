@@ -4,8 +4,11 @@ package gohttp
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
+	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -27,7 +30,7 @@ func AllowLFLineEndings(allow bool) {
 //
 // If the user allows LF line endings, the header fields and the empty
 // line terminating the header section may be LF instead of CRLF endings.
-func ParseRequest(r bufio.Reader) (*http.Request, error) {
+func ParseRequest(r *bufio.Reader) (*http.Request, error) {
 	request := http.Request{}
 
 	// RFC 7230, section 3.5. states that a robust parser implementation
@@ -73,18 +76,25 @@ func ParseRequest(r bufio.Reader) (*http.Request, error) {
 	}
 
 	emptyLine, err := r.ReadString('\n')
-	if err != nil {
+	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, err
+	}
+
+	// If the error is EOF, a body isn't expected anymore. Otherwise, an
+	// empty line followed by the actual message body is expected.
+	if errors.Is(err, io.EOF) {
+		return &request, nil
 	}
 
 	if !isNewLine(emptyLine) {
 		return nil, errors.New("empty line after header section is missing")
 	}
 
-	// If the Transfer-Encoding header is set, the length of the message
-	// chunk is contained within the body (RFC 7230, section 3.3.3.).
 	bodyOnset, err := r.ReadString('\n')
 	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return &request, nil
+		}
 		return nil, err
 	}
 
@@ -99,8 +109,38 @@ func ParseRequest(r bufio.Reader) (*http.Request, error) {
 //
 // SerializeRequest uses CRLF line endings when serializing the request
 // instance, regardless whether the user allows LF line endings or not.
-func SerializeRequest(r *http.Request) (error, []byte) {
-	return nil, nil
+func SerializeRequest(r *http.Request) ([]byte, error) {
+	var buf bytes.Buffer
+
+	buf.WriteString(fmt.Sprintf("%s %s %s\r\n", r.Method, r.URL.String(), r.Proto))
+
+	for fieldName, values := range r.Header {
+		var fieldValue string
+
+		// Assemble the field value components (RFC 7230, section 3.2.6).
+		for i := 0; i < len(values); i++ {
+			fieldValue += values[i]
+			if i < len(values)-1 {
+				fieldValue += ", "
+			}
+		}
+
+		buf.WriteString(fmt.Sprintf("%s: %s\r\n", fieldName, fieldValue))
+	}
+
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(body) == 0 {
+		return buf.Bytes(), nil
+	}
+
+	buf.WriteString("\r\n")
+	buf.Write(body)
+
+	return buf.Bytes(), nil
 }
 
 // ParseResponse reads a given source and parses an http.Response instance
@@ -108,7 +148,7 @@ func SerializeRequest(r *http.Request) (error, []byte) {
 //
 // If the user allows LF line endings, the header fields and the empty
 // line terminating the header section may be LF instead of CRLF endings.
-func ParseResponse(r bufio.Reader) (*http.Response, error) {
+func ParseResponse(r *bufio.Reader) (*http.Response, error) {
 	return nil, nil
 }
 
@@ -116,12 +156,10 @@ func ParseResponse(r bufio.Reader) (*http.Response, error) {
 //
 // SerializeResponse uses CRLF line endings when serializing the response
 // instance, regardless whether the user allows LF line endings or not.
-func SerializeResponse(r *http.Response) (error, []byte) {
+func SerializeResponse(r *http.Response) ([]byte, error) {
 	return nil, nil
 }
 
-// parseRequestLine parses a HTTP request line and returns the data as
-// individual variables: HTTP method, target URL and protocol.
 func parseRequestLine(line string) (string, *url.URL, string, error) {
 	data := strings.Split(line, " ")
 
@@ -130,16 +168,18 @@ func parseRequestLine(line string) (string, *url.URL, string, error) {
 		return "", nil, "", errors.New("invalid request line syntax")
 	}
 
-	targetUrl, err := url.Parse(data[1])
+	method := strings.TrimSuffix(data[0], "\n")
+	targetUrl := strings.TrimSuffix(data[1], "\n")
+	protocol := strings.TrimSuffix(data[2], "\n")
+
+	parsedUrl, err := url.Parse(targetUrl)
 	if err != nil {
 		return "", nil, "", err
 	}
 
-	return data[0], targetUrl, data[1], nil
+	return method, parsedUrl, protocol, nil
 }
 
-// parseHeaderField parses a single HTTP header field and returns the data
-// as individual variables: header field name and header field value.
 func parseHeaderField(line string) (string, string, error) {
 	tokens := strings.Split(line, ":")
 
@@ -149,14 +189,15 @@ func parseHeaderField(line string) (string, string, error) {
 	}
 
 	name := strings.TrimSpace(tokens[0])
-	value := strings.TrimSpace(tokens[1])
+	value := strings.TrimSpace(strings.TrimSuffix(tokens[1], "\n"))
 
 	return name, value, nil
 }
 
-// determineBodyLength determines the expected body length for an HTTP
-// message based on header fields and the first few bytes of the body.
 func determineBodyLength(headers http.Header, bodyOnset string) int {
+
+	// If the Transfer-Encoding header is set, the length of the message
+	// chunk is contained within the body (RFC 7230, section 3.3.3.).
 	if transferEncoding := headers.Get("Transfer-Encoding"); transferEncoding != "" {
 		// ToDo: Determine the body length based on Transfer-Encoding
 		return 1
