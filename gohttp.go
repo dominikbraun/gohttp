@@ -1,5 +1,5 @@
 // Package gohttp provides convenience functions for parsing net/http
-// objects from a source and converting them back to byte slices.
+// objects from a source and serializing them back to byte slices.
 package gohttp
 
 import (
@@ -13,12 +13,11 @@ import (
 )
 
 var (
-	// allowLFLineEndings defines whether LF can be used instead of CRLF.
 	allowLFLineEndings = false
 )
 
-// AllowLFLineEndings defines whether LF line endings are allowed as a
-// replacement for CRLF line endings for a more tolerant source parsing.
+// AllowLFLineEndings defines whether LF line endings are allowed for more
+// tolerant parsing. Use with care!
 func AllowLFLineEndings(allow bool) {
 	allowLFLineEndings = allow
 }
@@ -40,12 +39,20 @@ func ParseRequest(r bufio.Reader) (*http.Request, error) {
 		}
 
 		if !isNewLine(line) {
-			if err := readInRequestLine(line, &request); err != nil {
+			method, targetUrl, protocol, err := parseRequestLine(line)
+			if err != nil {
 				return nil, err
 			}
+
+			request.Method = method
+			request.URL = targetUrl
+			request.Proto = protocol
+
 			break
 		}
 	}
+
+	request.Header = make(http.Header)
 
 	for {
 		line, err := r.ReadString('\n')
@@ -65,12 +72,24 @@ func ParseRequest(r bufio.Reader) (*http.Request, error) {
 		request.Header.Add(fieldName, fieldValue)
 	}
 
-	if length := determineBodyLength(&request); length > 0 {
-		_, err := r.ReadString('\n')
-		if err != nil && err != io.EOF {
-			return nil, err
-		}
-		// ToDo: Set request body
+	emptyLine, err := r.ReadString('\n')
+	if err != nil {
+		return nil, err
+	}
+
+	if !isNewLine(emptyLine) {
+		return nil, errors.New("empty line after header section is missing")
+	}
+
+	// If the Transfer-Encoding header is set, the length of the message
+	// chunk is contained within the body (RFC 7230, section 3.3.3.).
+	bodyOnset, err := r.ReadString('\n')
+	if err != nil {
+		return nil, err
+	}
+
+	if length := determineBodyLength(request.Header, bodyOnset); length > 0 {
+		// ToDo: Write remaining message into request.Body
 	}
 
 	return nil, nil
@@ -101,34 +120,30 @@ func SerializeResponse(r *http.Response) (error, []byte) {
 	return nil, nil
 }
 
-// readInRequestLine reads in an HTTP request line and populates a given
-// request object with the parsed data.
-//
-// The line has to be formatted according to RFC 7230, section 3.1.1.
-func readInRequestLine(requestLine string, r *http.Request) error {
-	data := strings.Split(requestLine, " ")
+// parseRequestLine parses a HTTP request line and returns the data as
+// individual variables: HTTP method, target URL and protocol.
+func parseRequestLine(line string) (string, *url.URL, string, error) {
+	data := strings.Split(line, " ")
 
+	// RFC 7230, section 3.1.1 prescribes exactly 3 tokens.
 	if len(data) != 3 {
-		return errors.New("invalid request line syntax")
+		return "", nil, "", errors.New("invalid request line syntax")
 	}
 
 	targetUrl, err := url.Parse(data[1])
 	if err != nil {
-		return err
+		return "", nil, "", err
 	}
 
-	r.Method = data[0]
-	r.Proto = data[2]
-	r.URL = targetUrl
-
-	return nil
+	return data[0], targetUrl, data[1], nil
 }
 
-// parseHeaderField parses a single HTTP header field. The respective line
-// has to be formatted according to RFC 7230, sections 3.2. and 3.2.4.
+// parseHeaderField parses a single HTTP header field and returns the data
+// as individual variables: header field name and header field value.
 func parseHeaderField(line string) (string, string, error) {
 	tokens := strings.Split(line, ":")
 
+	// RFC 7230, sections 3.2. and 3.2.4. prescribe exactly 2 tokens.
 	if len(tokens) != 2 {
 		return "", "", errors.New("invalid header field syntax")
 	}
@@ -139,15 +154,15 @@ func parseHeaderField(line string) (string, string, error) {
 	return name, value, nil
 }
 
-// determineBodyLength determines the expected body length for a given
-// HTTP request as described in FRC 7230, section 3.3.
-func determineBodyLength(r *http.Request) int {
-	if transferEncoding := r.Header.Get("Transfer-Encoding"); transferEncoding != "" {
+// determineBodyLength determines the expected body length for an HTTP
+// message based on header fields and the first few bytes of the body.
+func determineBodyLength(headers http.Header, bodyOnset string) int {
+	if transferEncoding := headers.Get("Transfer-Encoding"); transferEncoding != "" {
 		// ToDo: Determine the body length based on Transfer-Encoding
 		return 1
 	}
 
-	if contentLength := r.Header.Get("Content-Length"); contentLength != "" {
+	if contentLength := headers.Get("Content-Length"); contentLength != "" {
 		length, _ := strconv.Atoi(contentLength)
 		return length
 	}
