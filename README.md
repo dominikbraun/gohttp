@@ -10,7 +10,7 @@ serializing them back to byte slices. At the moment, `gohttp` is HTTP/1.1-compat
 
 ### ParseRequest
 
-ParseRequest reads a given source and parses an `http.Request` instance from it.
+`ParseRequest` reads a given source and parses an `http.Request` instance from it.
 
 ```go
 conn, err := server.listener.Accept()
@@ -25,7 +25,7 @@ request, _ := gohttp.ParseRequest(connReader)
 
 ### SerializeRequest
 
-SerializeRequest converts an `http.Request` instance into a byte slice.
+`SerializeRequest` converts an `http.Request` instance into a byte slice.
 
 ```go
 conn.setWriteDeadline(time.Now().Add(10 * time.Second))
