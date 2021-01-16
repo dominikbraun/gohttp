@@ -16,14 +16,29 @@ import (
 	"unicode"
 )
 
-var (
-	allowLFLineEndings = false
-)
+type config struct {
+	allowLFLineEndings bool
+}
 
-// AllowLFLineEndings defines whether LF line endings are allowed for more
+func newConfig(options ...Option) config {
+	var config config
+
+	for _, option := range options {
+		option(&config)
+	}
+
+	return config
+}
+
+// Option represents a function that modifies the passed config instance.
+type Option func(*config)
+
+// WithLFLineEndings defines whether LF line endings are allowed for more
 // tolerant parsing. Use with care!
-func AllowLFLineEndings(allow bool) {
-	allowLFLineEndings = allow
+func WithLFLineEndings(allow bool) Option {
+	return func(c *config) {
+		c.allowLFLineEndings = allow
+	}
 }
 
 // ParseRequest reads a given source and parses an http.Request instance
@@ -31,7 +46,8 @@ func AllowLFLineEndings(allow bool) {
 //
 // If the user allows LF line endings, the header fields and the empty
 // line terminating the header section may be LF instead of CRLF endings.
-func ParseRequest(reader *bufio.Reader) (*http.Request, error) {
+func ParseRequest(reader *bufio.Reader, options ...Option) (*http.Request, error) {
+	config := newConfig(options...)
 	request := http.Request{}
 
 	// RFC 7230, section 3.5. states that a robust parser implementation
@@ -42,7 +58,7 @@ func ParseRequest(reader *bufio.Reader) (*http.Request, error) {
 			return nil, err
 		}
 
-		if !isNewLine(line) {
+		if !isNewLine(line, config) {
 			method, targetUrl, protocol, err := parseRequestLine(line)
 			if err != nil {
 				return nil, err
@@ -70,7 +86,7 @@ func ParseRequest(reader *bufio.Reader) (*http.Request, error) {
 			break
 		}
 
-		if isNewLine(line) {
+		if isNewLine(line, config) {
 			break
 		}
 
@@ -82,7 +98,7 @@ func ParseRequest(reader *bufio.Reader) (*http.Request, error) {
 		request.Header.Add(fieldName, fieldValue)
 	}
 
-	if !isNewLine(line) {
+	if !isNewLine(line, config) {
 		return nil, errors.New("empty line after header section is missing")
 	}
 
@@ -136,9 +152,10 @@ func SerializeRequest(r *http.Request) ([]byte, error) {
 // ParseResponse reads a given source and parses an http.Response instance
 // from it.
 //
-// If the user allows LF line endings, the header fields and the empty
-// line terminating the header section may be LF instead of CRLF endings.
-func ParseResponse(reader *bufio.Reader) (*http.Response, error) {
+// The option WithLFLineEndings allows the header fields and the empty line
+// terminating the header section to be LF instead of CRLF endings.
+func ParseResponse(reader *bufio.Reader, options ...Option) (*http.Response, error) {
+	config := newConfig(options...)
 	response := http.Response{}
 
 	line, err := reader.ReadString('\n')
@@ -167,7 +184,7 @@ func ParseResponse(reader *bufio.Reader) (*http.Response, error) {
 			break
 		}
 
-		if isNewLine(line) {
+		if isNewLine(line, config) {
 			break
 		}
 
@@ -179,7 +196,7 @@ func ParseResponse(reader *bufio.Reader) (*http.Response, error) {
 		response.Header.Add(fieldName, fieldValue)
 	}
 
-	if !isNewLine(line) {
+	if !isNewLine(line, config) {
 		return nil, errors.New("empty line after header section is missing")
 	}
 
@@ -334,8 +351,8 @@ func determineBodyLength(headers http.Header, reader *bufio.Reader) (int, error)
 	return 0, nil
 }
 
-func isNewLine(line string) bool {
-	if allowLFLineEndings {
+func isNewLine(line string, config config) bool {
+	if config.allowLFLineEndings {
 		return line == "\r\n" || line == "\n"
 	}
 	return line == "\r\n"

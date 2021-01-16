@@ -36,11 +36,9 @@ Host: www.example.com
 		},
 	}
 
-	AllowLFLineEndings(true)
-
 	for name, tc := range testCases {
 		reader := bufio.NewReader(strings.NewReader(tc.source))
-		actual, err := ParseRequest(reader)
+		actual, err := ParseRequest(reader, WithLFLineEndings(true))
 		if err != nil {
 			t.Fatalf("'%s': unexpected error: %s", name, err.Error())
 		}
