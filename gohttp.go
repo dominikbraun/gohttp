@@ -152,7 +152,8 @@ func SerializeRequest(r *http.Request) ([]byte, error) {
 // ParseResponse reads a given source and parses an http.Response instance
 // from it.
 //
-// If the user allows LF line endings, the header fields and the empty
+// The option AllowLFLineEndings allows the header fields and the empty
+// line terminating the header section to be LF instead of CRLF endings. 
 // line terminating the header section may be LF instead of CRLF endings.
 func ParseResponse(reader *bufio.Reader, options ...Option) (*http.Response, error) {
 	config := newConfig(options...)
