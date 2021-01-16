@@ -33,9 +33,9 @@ func newConfig(options ...Option) config {
 // Option represents a function that modifies the passed config instance.
 type Option func(*config)
 
-// AllowLFLineEndings defines whether LF line endings are allowed for more
+// WithLFLineEndings defines whether LF line endings are allowed for more
 // tolerant parsing. Use with care!
-func AllowLFLineEndings(allow bool) Option {
+func WithLFLineEndings(allow bool) Option {
 	return func(c *config) {
 		c.allowLFLineEndings = allow
 	}
