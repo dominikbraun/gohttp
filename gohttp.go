@@ -217,7 +217,37 @@ func ParseResponse(reader *bufio.Reader) (*http.Response, error) {
 // SerializeResponse uses CRLF line endings when serializing the response
 // instance, regardless whether the user allows LF line endings or not.
 func SerializeResponse(r *http.Response) ([]byte, error) {
-	return nil, nil
+	var buf bytes.Buffer
+
+	buf.WriteString(fmt.Sprintf("%s %s\r\n", r.Proto, r.Status))
+
+	for fieldName, values := range r.Header {
+		var fieldValue string
+
+		// Assemble the field value components (RFC 7230, section 3.2.6).
+		for i := 0; i < len(values); i++ {
+			fieldValue += values[i]
+			if i < len(values)-1 {
+				fieldValue += ", "
+			}
+		}
+
+		buf.WriteString(fmt.Sprintf("%s: %s\r\n", fieldName, fieldValue))
+	}
+
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(body) == 0 {
+		return buf.Bytes(), nil
+	}
+
+	buf.WriteString("\r\n")
+	buf.Write(body)
+
+	return buf.Bytes(), nil
 }
 
 func parseRequestLine(line string) (string, *url.URL, string, error) {
@@ -272,6 +302,29 @@ func parseHeaderField(line string) (string, string, error) {
 	value := strings.TrimSpace(strings.TrimSuffix(tokens[1], "\n"))
 
 	return name, value, nil
+}
+
+func writeHeaderFields(headers http.Header, w io.Writer) error {
+	for fieldName, values := range headers {
+		var fieldValue string
+
+		// Assemble the field value components (RFC 7230, section 3.2.6).
+		for i := 0; i < len(values); i++ {
+			fieldValue += values[i]
+			if i < len(values)-1 {
+				fieldValue += ", "
+			}
+		}
+
+		headerField := fmt.Sprintf("%s: %s\r\n", fieldName, fieldValue)
+
+		_, err := w.Write([]byte(headerField))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func determineBodyLength(headers http.Header, reader *bufio.Reader) (int, error) {
