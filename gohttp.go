@@ -114,18 +114,8 @@ func SerializeRequest(r *http.Request) ([]byte, error) {
 
 	buf.WriteString(fmt.Sprintf("%s %s %s\r\n", r.Method, r.URL.String(), r.Proto))
 
-	for fieldName, values := range r.Header {
-		var fieldValue string
-
-		// Assemble the field value components (RFC 7230, section 3.2.6).
-		for i := 0; i < len(values); i++ {
-			fieldValue += values[i]
-			if i < len(values)-1 {
-				fieldValue += ", "
-			}
-		}
-
-		buf.WriteString(fmt.Sprintf("%s: %s\r\n", fieldName, fieldValue))
+	if err := writeHeaderFields(r.Header, &buf); err != nil {
+		return nil, err
 	}
 
 	body, err := ioutil.ReadAll(r.Body)
@@ -221,18 +211,8 @@ func SerializeResponse(r *http.Response) ([]byte, error) {
 
 	buf.WriteString(fmt.Sprintf("%s %s\r\n", r.Proto, r.Status))
 
-	for fieldName, values := range r.Header {
-		var fieldValue string
-
-		// Assemble the field value components (RFC 7230, section 3.2.6).
-		for i := 0; i < len(values); i++ {
-			fieldValue += values[i]
-			if i < len(values)-1 {
-				fieldValue += ", "
-			}
-		}
-
-		buf.WriteString(fmt.Sprintf("%s: %s\r\n", fieldName, fieldValue))
+	if err := writeHeaderFields(r.Header, &buf); err != nil {
+		return nil, err
 	}
 
 	body, err := ioutil.ReadAll(r.Body)
