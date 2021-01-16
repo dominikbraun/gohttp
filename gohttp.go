@@ -100,11 +100,9 @@ func ParseRequest(reader *bufio.Reader) (*http.Request, error) {
 		if n != length {
 			return nil, errors.New("wrong body length")
 		}
-
-		fmt.Println(string(body))
 	}
 
-	return nil, nil
+	return &request, nil
 }
 
 // SerializeRequest converts an http.Request instance into a byte slice.
@@ -150,8 +148,68 @@ func SerializeRequest(r *http.Request) ([]byte, error) {
 //
 // If the user allows LF line endings, the header fields and the empty
 // line terminating the header section may be LF instead of CRLF endings.
-func ParseResponse(r *bufio.Reader) (*http.Response, error) {
-	return nil, nil
+func ParseResponse(reader *bufio.Reader) (*http.Response, error) {
+	response := http.Response{}
+
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return nil, err
+	}
+
+	protocol, statusCode, reasonPhrase, err := parseStatusLine(line)
+	if err != nil {
+		return nil, err
+	}
+
+	response.Proto = protocol
+	response.StatusCode = statusCode
+	response.Status = fmt.Sprintf("%d %s", statusCode, reasonPhrase)
+
+	response.Header = make(http.Header)
+
+	for {
+		line, err = reader.ReadString('\n')
+		if err != nil && !errors.Is(err, io.EOF) {
+			return nil, err
+		}
+
+		if errors.Is(err, io.EOF) {
+			break
+		}
+
+		if isNewLine(line) {
+			break
+		}
+
+		fieldName, fieldValue, err := parseHeaderField(line)
+		if err != nil {
+			return nil, err
+		}
+
+		response.Header.Add(fieldName, fieldValue)
+	}
+
+	if !isNewLine(line) {
+		return nil, errors.New("empty line after header section is missing")
+	}
+
+	length, err := determineBodyLength(response.Header, reader)
+	if err != nil {
+		return nil, err
+	}
+
+	if length > 0 {
+		var body = make([]byte, length)
+		n, err := reader.Read(body)
+		if err != nil {
+			return nil, err
+		}
+		if n != length {
+			return nil, errors.New("wrong body length")
+		}
+	}
+
+	return &response, nil
 }
 
 // SerializeResponse converts an http.Response instance into a byte slice.
@@ -165,7 +223,7 @@ func SerializeResponse(r *http.Response) ([]byte, error) {
 func parseRequestLine(line string) (string, *url.URL, string, error) {
 	data := strings.Split(line, " ")
 
-	// RFC 7230, section 3.1.1 prescribes exactly 3 tokens.
+	// RFC 7230, section 3.1.1. prescribes exactly 3 tokens.
 	if len(data) != 3 {
 		return "", nil, "", errors.New("invalid request line syntax")
 	}
@@ -180,6 +238,26 @@ func parseRequestLine(line string) (string, *url.URL, string, error) {
 	}
 
 	return method, parsedUrl, protocol, nil
+}
+
+func parseStatusLine(line string) (string, int, string, error) {
+	data := strings.Split(line, " ")
+
+	// RFC 7230, section 3.1.2. prescribes exactly 3 tokens.
+	if len(data) != 3 {
+		return "", 0, "", errors.New("invalid status line syntax")
+	}
+
+	protocol := strings.TrimSuffix(data[0], "\n")
+	statusCode := strings.TrimSuffix(data[1], "\n")
+	reasonPhrase := strings.TrimSuffix(data[2], "\n")
+
+	parsedStatusCode, err := strconv.Atoi(statusCode)
+	if err != nil {
+		return "", 0, "", err
+	}
+
+	return protocol, parsedStatusCode, reasonPhrase, nil
 }
 
 func parseHeaderField(line string) (string, string, error) {
