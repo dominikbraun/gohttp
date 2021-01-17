@@ -139,11 +139,12 @@ func SerializeRequest(r *http.Request) ([]byte, error) {
 		return nil, err
 	}
 
+	buf.WriteString("\r\n")
+
 	if len(body) == 0 {
 		return buf.Bytes(), nil
 	}
 
-	buf.WriteString("\r\n")
 	buf.Write(body)
 
 	return buf.Bytes(), nil

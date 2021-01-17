@@ -27,6 +27,7 @@ func TestParseRequest(t *testing.T) {
 			source: `
 GET / HTTP/1.1
 Host: www.example.com
+
 `,
 			expected: message{
 				method:   "GET",
@@ -82,7 +83,8 @@ func TestSerializeRequest(t *testing.T) {
 			},
 			expected: "GET / HTTP/1.1\r\n" +
 				"Host: example.com\r\n" +
-				"Transfer-Encoding: gzip, chunked\r\n",
+				"Transfer-Encoding: gzip, chunked\r\n" +
+				"\r\n",
 		},
 	}
 
