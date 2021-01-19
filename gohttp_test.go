@@ -185,3 +185,38 @@ func TestParseStatusLine(t *testing.T) {
 		}
 	}
 }
+
+func TestParseHeaderField(t *testing.T) {
+	type headerField struct {
+		name  string
+		value string
+	}
+
+	testCases := map[string]struct {
+		line     string
+		expected headerField
+	}{
+		"Content-Length header": {
+			line: "Content-Length: 1024",
+			expected: headerField{
+				name:  "Content-Length",
+				value: "1024",
+			},
+		},
+	}
+
+	for name, tc := range testCases {
+		actualName, actualValue, err := parseHeaderField(tc.line)
+		if err != nil {
+			t.Fatalf("'%s': unexpected error: %s", name, err.Error())
+		}
+
+		if actualName != tc.expected.name {
+			t.Errorf("'%s': expected name %s, got %s", name, tc.expected.name, actualName)
+		}
+
+		if actualValue != tc.expected.value {
+			t.Errorf("'%s': expected value %s, got %s", name, tc.expected.value, actualValue)
+		}
+	}
+}
