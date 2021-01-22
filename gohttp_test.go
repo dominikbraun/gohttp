@@ -220,3 +220,15 @@ func TestParseHeaderField(t *testing.T) {
 		}
 	}
 }
+
+func TestWriteHeaderFields(t *testing.T) {
+	return
+}
+
+func TestDetermineBodyLength(t *testing.T) {
+	return
+}
+
+func TestIsNewLine(t *testing.T) {
+	return
+}
