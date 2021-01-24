@@ -2,15 +2,13 @@ package gohttp
 
 import (
 	"bufio"
+	"bytes"
 	"net/http"
 	"net/url"
 	"strings"
 	"testing"
 )
 
-// TestParseRequest tests the ParseRequest function by providing sample
-// requests with different HTTP methods. The parsed http.Request instance
-// is expected to possess the same data as the message struct.
 func TestParseRequest(t *testing.T) {
 	type message struct {
 		method   string
@@ -58,9 +56,6 @@ Host: www.example.com
 	}
 }
 
-// TestSerializeRequest tests the SerializeRequest function by providing
-// sample http.Request instances with different HTTP methods. The serialized
-// request is expected to be identical to the string representation.
 func TestSerializeRequest(t *testing.T) {
 	parsedUrl, _ := url.Parse("/")
 
@@ -222,13 +217,36 @@ func TestParseHeaderField(t *testing.T) {
 }
 
 func TestWriteHeaderFields(t *testing.T) {
-	return
+	testCases := map[string]struct {
+		headers  http.Header
+		expected string
+	}{
+		"standard header fields": {
+			headers: map[string][]string{
+				"Content-Type":   {"text/html"},
+				"Content-Length": {"1024"},
+				"Keep-Alive":     {"timeout=5", "max=1000"},
+			},
+			expected: "Content-Type: text/html\r\n" +
+				"Content-Length: 1024\r\n" +
+				"Keep-Alive: timeout=5, max=1000\r\n" +
+				"\r\n",
+		},
+	}
+
+	for name, tc := range testCases {
+		var buf bytes.Buffer
+
+		if err := writeHeaderFields(tc.headers, &buf); err != nil {
+			t.Fatalf("'%s': unexpected error: %s", name, err.Error())
+		}
+
+		if buf.String() != tc.expected {
+			t.Errorf("'%s': expected headers %s, got %s", name, tc.expected, buf.String())
+		}
+	}
 }
 
-func TestDetermineBodyLength(t *testing.T) {
-	return
-}
+func TestDetermineBodyLength(t *testing.T) {}
 
-func TestIsNewLine(t *testing.T) {
-	return
-}
+func TestIsNewLine(t *testing.T) {}
