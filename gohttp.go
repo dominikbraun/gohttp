@@ -139,8 +139,6 @@ func SerializeRequest(r *http.Request) ([]byte, error) {
 		return nil, err
 	}
 
-	buf.WriteString("\r\n")
-
 	if len(body) == 0 {
 		return buf.Bytes(), nil
 	}
@@ -242,7 +240,6 @@ func SerializeResponse(r *http.Response) ([]byte, error) {
 		return buf.Bytes(), nil
 	}
 
-	buf.WriteString("\r\n")
 	buf.Write(body)
 
 	return buf.Bytes(), nil
@@ -316,10 +313,13 @@ func writeHeaderFields(headers http.Header, w io.Writer) error {
 
 		headerField := fmt.Sprintf("%s: %s\r\n", fieldName, fieldValue)
 
-		_, err := w.Write([]byte(headerField))
-		if err != nil {
+		if _, err := w.Write([]byte(headerField)); err != nil {
 			return err
 		}
+	}
+
+	if _, err := w.Write([]byte("\r\n")); err != nil {
+		return err
 	}
 
 	return nil
