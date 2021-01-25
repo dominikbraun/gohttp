@@ -247,6 +247,54 @@ func TestWriteHeaderFields(t *testing.T) {
 	}
 }
 
-func TestDetermineBodyLength(t *testing.T) {}
+func TestDetermineBodyLength(t *testing.T) {
+	testCases := map[string]struct {
+		transferEncoding string
+		contentLength    string
+		body             string
+		expected         int
+	}{
+		"transfer encoding": {
+			transferEncoding: "gzip, chunked",
+			body:             "400\r\n",
+			expected:         1024,
+		},
+		"content length": {
+			contentLength: "2048",
+			expected:      2048,
+		},
+		"transfer encoding and content length": {
+			transferEncoding: "gzip, chunked",
+			contentLength:    "2048",
+			body:             "400\r\n",
+			expected:         1024,
+		},
+		"none": {
+			expected: -1,
+		},
+	}
+
+	for name, tc := range testCases {
+		headers := make(http.Header)
+
+		if tc.transferEncoding != "" {
+			headers.Add("Transfer-Encoding", tc.transferEncoding)
+		}
+		if tc.contentLength != "" {
+			headers.Add("Content-Length", tc.contentLength)
+		}
+
+		reader := bufio.NewReader(strings.NewReader(tc.body))
+
+		actual, err := determineBodyLength(headers, reader)
+		if err != nil {
+			t.Fatalf("'%s': unexpected error: %s", name, err.Error())
+		}
+
+		if actual != tc.expected {
+			t.Errorf("'%s': expected body length %d, got %d", name, tc.expected, actual)
+		}
+	}
+}
 
 func TestIsNewLine(t *testing.T) {}
