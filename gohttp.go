@@ -349,7 +349,7 @@ func determineBodyLength(headers http.Header, reader *bufio.Reader) (int, error)
 		return strconv.Atoi(contentLength)
 	}
 
-	return 0, nil
+	return -1, nil
 }
 
 func isNewLine(line string, config config) bool {
