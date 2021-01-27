@@ -297,4 +297,43 @@ func TestDetermineBodyLength(t *testing.T) {
 	}
 }
 
-func TestIsNewLine(t *testing.T) {}
+func TestIsNewLine(t *testing.T) {
+	testCases := map[string]struct {
+		line     string
+		config   config
+		expected bool
+	}{
+		"CRLF, LF not allowed": {
+			line:     "\r\n",
+			config:   config{},
+			expected: true,
+		},
+		"CRLF, LF allowed": {
+			line: "\r\n",
+			config: config{
+				allowLFLineEndings: true,
+			},
+			expected: true,
+		},
+		"LF, LF not allowed": {
+			line:     "\n",
+			config:   config{},
+			expected: false,
+		},
+		"LF, LF allowed": {
+			line: "\n",
+			config: config{
+				allowLFLineEndings: true,
+			},
+			expected: true,
+		},
+	}
+
+	for name, tc := range testCases {
+		actual := isNewLine(tc.line, tc.config)
+
+		if actual != tc.expected {
+			t.Errorf("'%s': expected result %v, got %v", name, tc.expected, actual)
+		}
+	}
+}
