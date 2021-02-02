@@ -95,7 +95,52 @@ func TestSerializeRequest(t *testing.T) {
 	}
 }
 
-func TestParseResponse(t *testing.T) {}
+func TestParseResponse(t *testing.T) {
+	type message struct {
+		protocol     string
+		statusCode   int
+		reasonPhrase string
+		body         string
+	}
+
+	testCases := map[string]struct {
+		source   string
+		expected message
+	}{
+		"response from GET": {
+			source: "HTTP/1.1 200 OK\r\n" +
+				"Content-Length: 19\r\n" +
+				"\r\n" +
+				"This is a response!",
+			expected: message{
+				protocol:     "HTTP/1.1",
+				statusCode:   200,
+				reasonPhrase: "200 OK",
+				body:         "This is a response!",
+			},
+		},
+	}
+
+	for name, tc := range testCases {
+		reader := bufio.NewReader(strings.NewReader(tc.source))
+		actual, err := ParseResponse(reader)
+		if err != nil {
+			t.Fatalf("'%s': unexpected error: %s", name, err.Error())
+		}
+
+		if actual.StatusCode != tc.expected.statusCode {
+			t.Errorf("'%s': expected status code %d, got %d", name, tc.expected.statusCode, actual.StatusCode)
+		}
+
+		if actual.Status != tc.expected.reasonPhrase {
+			t.Errorf("'%s': expected reason phrase %s, got %s", name, tc.expected.reasonPhrase, actual.Status)
+		}
+
+		if actual.Proto != tc.expected.protocol {
+			t.Errorf("'%s': expected protocol %s, got %s", name, tc.expected.protocol, actual.Proto)
+		}
+	}
+}
 
 func TestSerializeResponse(t *testing.T) {}
 

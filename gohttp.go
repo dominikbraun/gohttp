@@ -273,9 +273,9 @@ func parseStatusLine(line string) (string, int, string, error) {
 		return "", 0, "", errors.New("invalid status line syntax")
 	}
 
-	protocol := strings.TrimSuffix(data[0], "\n")
-	statusCode := strings.TrimSuffix(data[1], "\n")
-	reasonPhrase := strings.TrimSuffix(data[2], "\n")
+	protocol := strings.TrimSuffix(data[0], "\r\n")
+	statusCode := strings.TrimSuffix(data[1], "\r\n")
+	reasonPhrase := strings.TrimSuffix(data[2], "\r\n")
 
 	parsedStatusCode, err := strconv.Atoi(statusCode)
 	if err != nil {
